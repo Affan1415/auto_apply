@@ -344,15 +344,10 @@ class PlaywrightJobApplicator {
     }
 
     try {
-      // Fill basic form fields
-      await this.fillBasicFields(userConfig);
-      
+      // Fill all fields using userConfig or OpenAI
+      await this.fillAllFieldsWithAI(userConfig);
       // Handle file uploads (resume)
       await this.handleFileUploads(userConfig);
-      
-      // Handle dynamic questions
-      await this.handleDynamicQuestions(userConfig);
-
     } catch (error) {
       logger.error('Error filling application form:', error);
       throw error;
@@ -360,39 +355,277 @@ class PlaywrightJobApplicator {
   }
 
   /**
-   * Fill basic form fields
+   * Fill all fields using userConfig or OpenAI for missing values
    */
-  private async fillBasicFields(userConfig: any): Promise<void> {
+  private async fillAllFieldsWithAI(userConfig: any): Promise<void> {
     if (!this.page) return;
 
-    const fieldMappings = [
-      { configField: 'name', selectors: ['input[name*="name" i]', 'input[name*="full" i]', '[data-testid="name-input"]'] },
-      { configField: 'email', selectors: ['input[type="email"]', 'input[name*="email" i]', '[data-testid="email-input"]'] },
-      { configField: 'phone', selectors: ['input[type="tel"]', 'input[name*="phone" i]', 'input[name*="mobile" i]'] },
-      { configField: 'location', selectors: ['input[name*="location" i]', 'input[name*="city" i]', '[data-testid="location-input"]'] },
-      { configField: 'experience', selectors: ['input[name*="experience" i]', 'select[name*="experience" i]'] },
-      { configField: 'salary', selectors: ['input[name*="salary" i]', 'input[name*="compensation" i]'] },
-      { configField: 'linkedin', selectors: ['input[name*="linkedin" i]', 'input[name*="profile" i]'] },
-      { configField: 'github', selectors: ['input[name*="github" i]', 'input[name*="portfolio" i]'] }
-    ];
+    // Log the full userConfig for debugging
+    logger.info('userConfig:', JSON.stringify(userConfig, null, 2));
 
-    for (const mapping of fieldMappings) {
-      const value = userConfig[mapping.configField as keyof AutoApplyConfig];
-      if (value) {
-        for (const selector of mapping.selectors) {
-          try {
-            const element = await this.page.$(selector);
-            if (element) {
-              await element.fill(value as string);
-              logger.info(`Filled field ${mapping.configField} with value: ${value}`);
-              break;
-            }
-          } catch (error) {
-            // Continue to next selector
+    // Helper to get value or generate with OpenAI
+    const getValue = async (label: string, fallbackKey?: string): Promise<string> => {
+      let value = fallbackKey ? userConfig[fallbackKey] : undefined;
+      if (!value || value === '') {
+        const ai = await openAIManager.generateAnswer(label, userConfig);
+        value = ai.answer;
+        logger.info(`AI-generated for "${label}": ${value}`);
+      } else {
+        logger.info(`Filled from userConfig for "${label}": ${value}`);
+      }
+      return value || '';
+    };
+
+    // Helper to dismiss overlays/backdrops/cookie banners
+    const dismissOverlays = async () => {
+      if (!this.page) return;
+      // Try to close cookie consent
+      const cookieBtn = await this.page.$('button[data-ui="cookie-consent"], button:has-text("Accept"), button:has-text("Got it")');
+      if (cookieBtn) {
+        await cookieBtn.click().catch(() => {});
+        logger.info('Dismissed cookie consent');
+        await this.page.waitForTimeout(500);
+      }
+      // Try to close backdrop/modal
+      const backdrop = await this.page.$('[data-ui="backdrop"], .backdrop, .modal-overlay');
+      if (backdrop) {
+        await this.page.keyboard.press('Escape').catch(() => {});
+        logger.info('Dismissed backdrop/modal with Escape');
+        await this.page.waitForTimeout(500);
+      }
+    };
+
+    // Helper to robustly fill a field by trying label, placeholder, and name
+    const robustFill = async (label: string, selectors: string[], value: string) => {
+      if (!this.page) {
+        logger.warn(`Page is not initialized when trying to fill "${label}"`);
+        return false;
+      }
+      await dismissOverlays();
+      for (const selector of selectors) {
+        try {
+          const element = await this.page.$(selector);
+          if (element) {
+            await dismissOverlays();
+            await element.fill(value);
+            logger.info(`Filled field for "${label}" using selector: ${selector} with value: ${value}`);
+            return true;
           }
+        } catch (error) {
+          logger.warn(`Failed to fill field for "${label}" using selector: ${selector}`);
         }
       }
+      logger.warn(`Could not find field for "${label}" to fill.`);
+      return false;
+    };
+
+    // --- Personal Information ---
+    // First name, Last name (split full_name, fallback to OpenAI if missing)
+    let firstName = '';
+    let lastName = '';
+    if (userConfig.full_name && typeof userConfig.full_name === 'string') {
+      const parts = userConfig.full_name.trim().split(/\s+/);
+      firstName = parts[0] || (await getValue('First name'));
+      lastName = parts.slice(1).join(' ') || (await getValue('Last name'));
+    } else {
+      firstName = await getValue('First name');
+      lastName = await getValue('Last name');
     }
+    await robustFill('First name', [
+      'input[name*="first" i]',
+      'input[placeholder*="first" i]',
+      'input[aria-label*="first" i]',
+      'input[autocomplete*="given-name" i]'
+    ], firstName);
+    await robustFill('Last name', [
+      'input[name*="last" i]',
+      'input[placeholder*="last" i]',
+      'input[aria-label*="last" i]',
+      'input[autocomplete*="family-name" i]'
+    ], lastName);
+
+    // Email
+    const email = userConfig.email || await getValue('Email');
+    await robustFill('Email', [
+      'input[type="email"]',
+      'input[name*="email" i]',
+      'input[placeholder*="email" i]'
+    ], email);
+
+    // Headline
+    const headline = userConfig.current_job_title || userConfig.interest_reason || await getValue('Headline');
+    await robustFill('Headline', [
+      'input[placeholder*="headline" i]',
+      'input[name*="headline" i]',
+      'input[aria-label*="headline" i]'
+    ], headline);
+
+    // Phone
+    const phone = userConfig.phone || await getValue('Phone');
+    await robustFill('Phone', [
+      'input[type="tel"]',
+      'input[name*="phone" i]',
+      'input[placeholder*="phone" i]',
+      'input[aria-label*="phone" i]'
+    ], phone);
+
+    // Address
+    const address = userConfig.address || await getValue('Address');
+    await robustFill('Address', [
+      'input[name*="address" i]',
+      'input[placeholder*="address" i]',
+      'input[aria-label*="address" i]'
+    ], address);
+
+    // --- Profile: Education ---
+    let educations = [];
+    if (userConfig.education && Array.isArray(userConfig.education)) {
+      educations = userConfig.education;
+    } else if (userConfig.education) {
+      try { educations = JSON.parse(userConfig.education); } catch {}
+    }
+    if (!educations.length) {
+      const eduAI = await getValue('Education');
+      educations = [{ degree: eduAI }];
+    }
+    for (const edu of educations) {
+      // Wait for '+ Add' button to be enabled
+      const addBtn = await this.page.waitForSelector('button[data-ui="add-section"][aria-label*="Education"]', { timeout: 5000 }).catch(() => null);
+      if (addBtn) {
+        const isDisabled = await addBtn.getAttribute('disabled');
+        if (isDisabled !== null) {
+          logger.warn('Education "+ Add" button is disabled. Required fields above may not be filled.');
+        } else {
+          await addBtn.click();
+          logger.info('Clicked "+ Add" button for Education');
+          // Wait for the new input to appear (try common selectors)
+          const eduInput = await this.page.waitForSelector('input[name*="education" i], input[placeholder*="education" i], input[aria-label*="education" i]', { timeout: 5000 }).catch(() => null);
+          if (eduInput) {
+            await eduInput.fill(edu.degree || edu.field || edu.school || '');
+            logger.info('Filled education input after clicking "+ Add"');
+          } else {
+            logger.warn('Could not find education input after clicking "+ Add"');
+          }
+        }
+      } else {
+        logger.warn('Could not find "+ Add" button for Education');
+      }
+    }
+
+    // --- Profile: Experience ---
+    let experiences = [];
+    if (userConfig.work_experience && Array.isArray(userConfig.work_experience)) {
+      experiences = userConfig.work_experience;
+    } else if (userConfig.work_experience) {
+      try { experiences = JSON.parse(userConfig.work_experience); } catch {}
+    }
+    if (!experiences.length) {
+      const expAI = await getValue('Experience');
+      experiences = [{ position: expAI }];
+    }
+    for (const exp of experiences) {
+      // Try to click '+ Add' for experience if present
+      const addBtn = await this.page.$('button[data-ui="add-section"][aria-label*="Experience"]');
+      if (addBtn) {
+        const isDisabled = await addBtn.getAttribute('disabled');
+        if (isDisabled !== null) {
+          logger.warn('Experience "+ Add" button is disabled. Required fields above may not be filled.');
+        } else {
+          await addBtn.click();
+          logger.info('Clicked "+ Add" button for Experience');
+          const expInput = await this.page.waitForSelector('input[name*="experience" i], input[placeholder*="experience" i], input[aria-label*="experience" i]', { timeout: 5000 }).catch(() => null);
+          if (expInput) {
+            await expInput.fill(exp.position || exp.company || '');
+            logger.info('Filled experience input after clicking "+ Add"');
+          } else {
+            logger.warn('Could not find experience input after clicking "+ Add"');
+          }
+        }
+      } else {
+        logger.warn('Could not find "+ Add" button for Experience');
+      }
+    }
+
+    // --- Summary ---
+    const summary = userConfig.key_skills || userConfig.interest_reason || await getValue('Summary');
+    await robustFill('Summary', [
+      'textarea[placeholder*="summary" i]',
+      'textarea[name*="summary" i]',
+      'textarea[aria-label*="summary" i]'
+    ], summary);
+
+    // --- Resume upload is handled separately ---
+
+    // --- Cover letter (always use OpenAI) ---
+    const coverLetterAI = await getValue('Cover letter');
+    await robustFill('Cover letter', [
+      'textarea[placeholder*="cover letter" i]',
+      'textarea[name*="cover letter" i]',
+      'textarea[aria-label*="cover letter" i]'
+    ], coverLetterAI);
+
+    // --- Desired compensation (use config, fallback to OpenAI) ---
+    let compensation = userConfig.expected_salary || userConfig.desired_salary;
+    if (!compensation) {
+      compensation = await getValue('What is your desired compensation for this role?');
+    }
+    await robustFill('Desired compensation', [
+      'input[placeholder*="compensation" i]',
+      'textarea[placeholder*="compensation" i]',
+      'input[name*="compensation" i]',
+      'textarea[name*="compensation" i]',
+      'input[aria-label*="compensation" i]',
+      'textarea[aria-label*="compensation" i]'
+    ], compensation);
+
+    // --- Commute/relocate (use config, fallback to OpenAI) ---
+    let relocate = userConfig.relocation || userConfig.commute;
+    if (!relocate) {
+      relocate = await getValue('Are you currently able to commute to this location, or are you willing to relocate for this role?');
+    }
+    await robustFill('Commute/relocate', [
+      'textarea[placeholder*="commute" i]',
+      'textarea[placeholder*="relocate" i]',
+      'textarea[name*="commute" i]',
+      'textarea[name*="relocate" i]',
+      'textarea[aria-label*="commute" i]',
+      'textarea[aria-label*="relocate" i]'
+    ], relocate);
+  }
+
+  /**
+   * Improved submit logic: check for validation errors and log result
+   */
+  private async improvedSubmit(): Promise<boolean> {
+    if (!this.page) return false;
+    // Try multiple selectors for the submit button
+    const submitSelectors = [
+      'button[type="submit"]',
+      'input[type="submit"]',
+      'button:has-text("Submit application")',
+      'button:has-text("Submit")',
+      'button:has-text("Apply")'
+    ];
+    for (const selector of submitSelectors) {
+      const button = await this.page.$(selector);
+      if (button) {
+        await button.click();
+        logger.info(`Clicked submit button using selector: ${selector}`);
+        // Wait for possible validation errors
+        await this.page.waitForTimeout(2000);
+        // Check for error messages
+        const errorMsg = await this.page.$('.error, .form-error, [aria-live="assertive"]');
+        if (errorMsg) {
+          const text = await errorMsg.textContent();
+          logger.warn(`Validation error after submit: ${text}`);
+          return false;
+        }
+        logger.info('Form submitted (no validation errors detected)');
+        return true;
+      }
+    }
+    logger.warn('No submit button found');
+    return false;
   }
 
   /**

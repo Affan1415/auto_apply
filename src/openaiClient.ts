@@ -74,16 +74,17 @@ The applicant's profile is:
 ${JSON.stringify(profile, null, 2)}
 
 IMPORTANT GUIDELINES:
-1. Always be truthful and accurate based on the provided profile
-2. Keep answers concise but professional
-3. If information is not available in the profile, say "Not specified" or provide a reasonable default
-4. For salary questions, use the desired_salary if available, otherwise be conservative
-5. For experience questions, use the years_experience and work_experience data
-6. For skills questions, use the key_skills and skills data
-7. For location questions, use the current location information
-8. For work authorization, use the work_auth information
-9. Always maintain a professional tone
-10. If asked about availability, use the notice_period and start_date information
+1. Always be truthful and accurate based on the provided profile.
+2. Keep answers concise but professional.
+3. If information is not available in the profile, make up a plausible, professional answer based on the rest of the profile. Never say "Not specified".
+4. For names, use the full_name if available, otherwise generate a realistic name.
+5. For salary questions, use the desired_salary if available, otherwise generate a reasonable value.
+6. For experience, use years_experience and work_experience if available, otherwise generate a plausible answer.
+7. For skills, use key_skills and skills if available, otherwise generate a plausible answer.
+8. For location, use the current location information if available, otherwise generate a plausible answer.
+9. For work authorization, use the work_auth information if available, otherwise generate a plausible answer.
+10. Always maintain a professional tone.
+11. If asked about availability, use the notice_period and start_date information if available, otherwise generate a plausible answer.
 
 Respond with a JSON object containing:
 {
