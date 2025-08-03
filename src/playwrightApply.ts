@@ -655,6 +655,346 @@ class PlaywrightJobApplicator {
   }
 
   /**
+   * Handle remaining input fields and yes/no selectors
+   */
+  private async handleRemainingFieldsAndYesNoSelectors(): Promise<void> {
+    if (!this.page) return;
+
+    try {
+      logger.info('Handling remaining fields and yes/no selectors...');
+
+      // Helper to dismiss overlays
+      const dismissOverlays = async () => {
+        if (!this.page) return;
+        const cookieBtn = await this.page.$('button[data-ui="cookie-consent"], button:has-text("Accept"), button:has-text("Got it")');
+        if (cookieBtn) {
+          await cookieBtn.click().catch(() => {});
+          await this.page.waitForTimeout(500);
+        }
+        const backdrop = await this.page.$('[data-ui="backdrop"], .backdrop, .modal-overlay');
+        if (backdrop) {
+          await this.page.keyboard.press('Escape').catch(() => {});
+          await this.page.waitForTimeout(500);
+        }
+      };
+
+      // 1. Handle Yes/No selectors (radio buttons, checkboxes, dropdowns)
+      const yesNoSelectors = [
+        'input[type="radio"][value*="yes" i]',
+        'input[type="radio"][value*="true" i]',
+        'input[type="radio"][value="1"]',
+        'input[type="radio"][value="Yes"]',
+        'input[type="radio"][value="YES"]',
+        'input[type="checkbox"]',
+        'select option[value*="yes" i]',
+        'select option[value*="true" i]',
+        'select option[value="1"]',
+        'select option[value="Yes"]',
+        'select option[value="YES"]',
+        'button[data-value*="yes" i]',
+        'button[data-value*="true" i]',
+        'button[data-value="1"]',
+        'button[data-value="Yes"]',
+        'button[data-value="YES"]',
+        '[data-testid*="yes" i]',
+        '[data-testid*="true" i]',
+        '.yes-option',
+        '.true-option',
+        // More specific selectors for authorization questions
+        'input[type="radio"]:not([value*="no" i]):not([value*="false" i]):not([value="0"]):not([value="No"]):not([value="NO"])',
+        'input[type="radio"][value*="authorized" i]',
+        'input[type="radio"][value*="eligible" i]',
+        'input[type="radio"][value*="sponsorship" i]',
+        'input[type="radio"][value*="work" i]',
+        'input[type="radio"][value*="legal" i]'
+      ];
+
+      for (const selector of yesNoSelectors) {
+        try {
+          const elements = await this.page.$$(selector);
+          for (const element of elements) {
+            await dismissOverlays();
+            
+            // Check if it's a radio button or checkbox
+            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+            const type = await element.evaluate(el => (el as HTMLInputElement).type);
+            
+            if (tagName === 'input' && (type === 'radio' || type === 'checkbox')) {
+              // For radio buttons, check if it's already selected
+              const isChecked = await element.evaluate(el => (el as HTMLInputElement).checked);
+              if (!isChecked) {
+                await element.click();
+                logger.info(`Clicked yes/true option: ${selector}`);
+              }
+            } else if (tagName === 'option') {
+              // For select options, click the parent select and then the option
+              const select = await element.evaluate(el => el.parentElement);
+              if (select) {
+                await this.page.click(selector);
+                logger.info(`Selected yes/true option: ${selector}`);
+              }
+            } else {
+              // For other elements, just click
+              await element.click();
+              logger.info(`Clicked yes/true option: ${selector}`);
+            }
+          }
+        } catch (error) {
+          logger.debug(`Failed to handle selector ${selector}:`, error);
+        }
+      }
+
+      // 1.5. Handle radio button groups more comprehensively
+      try {
+        const radioGroups = await this.page.$$('input[type="radio"]');
+        const processedGroups = new Set();
+        
+        for (const radio of radioGroups) {
+          const name = await radio.evaluate(el => (el as HTMLInputElement).name);
+          if (name && !processedGroups.has(name)) {
+            processedGroups.add(name);
+            
+            // Get all radios in this group
+            const groupRadios = await this.page.$$(`input[type="radio"][name="${name}"]`);
+            
+            // Find the "Yes" option in this group
+            let yesOption = null;
+            for (const groupRadio of groupRadios) {
+              const value = await groupRadio.evaluate(el => (el as HTMLInputElement).value);
+              const text = await groupRadio.evaluate(el => {
+                const label = document.querySelector(`label[for="${el.id}"]`);
+                return label?.textContent?.trim() || '';
+              });
+              
+              // Check if this is a "Yes" option
+              if (value?.toLowerCase().includes('yes') || 
+                  value?.toLowerCase().includes('true') ||
+                  value === '1' ||
+                  value === 'Yes' ||
+                  value === 'YES' ||
+                  text?.toLowerCase().includes('yes') ||
+                  text?.toLowerCase().includes('true')) {
+                yesOption = groupRadio;
+                break;
+              }
+            }
+            
+            // If no "Yes" option found, select the first option that's not "No"
+            if (!yesOption) {
+              for (const groupRadio of groupRadios) {
+                const value = await groupRadio.evaluate(el => (el as HTMLInputElement).value);
+                const text = await groupRadio.evaluate(el => {
+                  const label = document.querySelector(`label[for="${el.id}"]`);
+                  return label?.textContent?.trim() || '';
+                });
+                
+                if (!value?.toLowerCase().includes('no') && 
+                    !value?.toLowerCase().includes('false') &&
+                    value !== '0' &&
+                    value !== 'No' &&
+                    value !== 'NO' &&
+                    !text?.toLowerCase().includes('no') &&
+                    !text?.toLowerCase().includes('false')) {
+                  yesOption = groupRadio;
+                  break;
+                }
+              }
+            }
+            
+            // Click the selected option
+            if (yesOption) {
+              const isChecked = await yesOption.evaluate(el => (el as HTMLInputElement).checked);
+              if (!isChecked) {
+                await yesOption.click();
+                logger.info(`Selected "Yes" option in radio group: ${name}`);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        logger.debug('Failed to handle radio button groups:', error);
+      }
+
+      // 2. Handle remaining text inputs and textareas with "yes"
+      const remainingTextSelectors = [
+        'input[type="text"]:not([name*="name"]):not([name*="email"]):not([name*="phone"]):not([name*="address"]):not([name*="headline"]):not([name*="compensation"]):not([name*="relocate"]):not([name*="commute"])',
+        'textarea:not([placeholder*="cover letter"]):not([placeholder*="summary"]):not([placeholder*="compensation"]):not([placeholder*="relocate"]):not([placeholder*="commute"])',
+        'input[type="text"]:not([value])',
+        'textarea:not([value])'
+      ];
+
+      for (const selector of remainingTextSelectors) {
+        try {
+          const elements = await this.page.$$(selector);
+          for (const element of elements) {
+            await dismissOverlays();
+            
+            // Check if the field is empty
+            const value = await element.evaluate(el => (el as HTMLInputElement | HTMLTextAreaElement).value);
+            const placeholder = await element.evaluate(el => (el as HTMLInputElement | HTMLTextAreaElement).placeholder);
+            
+            if (!value && !placeholder?.includes('cover letter') && !placeholder?.includes('summary')) {
+              await element.fill('yes');
+              logger.info(`Filled remaining field with "yes": ${selector}`);
+            }
+          }
+        } catch (error) {
+          logger.debug(`Failed to fill remaining field ${selector}:`, error);
+        }
+      }
+
+      // 3. Handle dropdowns and select elements
+      const dropdownSelectors = [
+        'select:not([name*="name"]):not([name*="email"]):not([name*="phone"]):not([name*="address"])',
+        'select option[value*="yes" i]',
+        'select option[value*="true" i]',
+        'select option[value="1"]',
+        'select option:first-child'
+      ];
+
+      for (const selector of dropdownSelectors) {
+        try {
+          const elements = await this.page.$$(selector);
+          for (const element of elements) {
+            await dismissOverlays();
+            
+            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+            if (tagName === 'select') {
+              // Try to select the first option or a "yes" option
+              const options = await element.$$('option');
+              if (options.length > 0) {
+                // Look for yes/true options first
+                let selectedOption = null;
+                for (const option of options) {
+                  const optionValue = await option.evaluate(el => (el as HTMLOptionElement).value);
+                  const optionText = await option.evaluate(el => (el as HTMLOptionElement).textContent);
+                  if (optionValue?.toLowerCase().includes('yes') || 
+                      optionText?.toLowerCase().includes('yes') ||
+                      optionValue?.toLowerCase().includes('true') ||
+                      optionText?.toLowerCase().includes('true') ||
+                      optionValue === '1') {
+                    selectedOption = option;
+                    break;
+                  }
+                }
+                
+                // If no yes option found, select the first option
+                if (!selectedOption && options.length > 0) {
+                  selectedOption = options[0];
+                }
+                
+                if (selectedOption) {
+                  await selectedOption.click();
+                  logger.info(`Selected dropdown option: ${selector}`);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          logger.debug(`Failed to handle dropdown ${selector}:`, error);
+        }
+      }
+
+      // 4. Handle specific authorization and eligibility questions
+      try {
+        const authorizationSelectors = [
+          'input[type="radio"]',
+          'input[type="checkbox"]',
+          'select',
+          'button[data-value]'
+        ];
+
+        for (const selector of authorizationSelectors) {
+          const elements = await this.page.$$(selector);
+          for (const element of elements) {
+            await dismissOverlays();
+            
+            // Get the context around this element to check if it's an authorization question
+            const context = await element.evaluate(el => {
+              // Look for nearby text that might indicate this is an authorization question
+              const parent = el.parentElement;
+              const grandparent = parent?.parentElement;
+              const text = [
+                parent?.textContent,
+                grandparent?.textContent,
+                document.querySelector(`label[for="${el.id}"]`)?.textContent,
+                el.closest('div')?.textContent,
+                el.closest('section')?.textContent
+              ].join(' ').toLowerCase();
+              
+              return {
+                text,
+                tagName: el.tagName.toLowerCase(),
+                type: (el as HTMLInputElement).type,
+                value: (el as HTMLInputElement).value,
+                name: (el as HTMLInputElement).name
+              };
+            });
+            
+            // Check if this looks like an authorization question
+            const authKeywords = [
+              'authorized', 'authorization', 'legally', 'legal', 'sponsorship', 
+              'sponsor', 'work permit', 'visa', 'citizenship', 'eligible', 
+              'eligibility', 'work authorization', 'employment authorization',
+              'legally authorized to work', 'without sponsorship'
+            ];
+            
+            const isAuthQuestion = authKeywords.some(keyword => 
+              context.text.includes(keyword)
+            );
+            
+            if (isAuthQuestion) {
+              logger.info(`Found authorization question: ${context.text.substring(0, 100)}...`);
+              
+              if (context.tagName === 'input' && context.type === 'radio') {
+                // For radio buttons, select the "Yes" option
+                const value = context.value;
+                const text = context.text;
+                
+                if (value?.toLowerCase().includes('yes') || 
+                    value?.toLowerCase().includes('true') ||
+                    value === '1' ||
+                    value === 'Yes' ||
+                    value === 'YES' ||
+                    text?.toLowerCase().includes('yes') ||
+                    text?.toLowerCase().includes('true')) {
+                  const isChecked = await element.evaluate(el => (el as HTMLInputElement).checked);
+                  if (!isChecked) {
+                    await element.click();
+                    logger.info(`Selected "Yes" for authorization question`);
+                  }
+                }
+              } else if (context.tagName === 'select') {
+                // For select elements, choose the first "Yes" option
+                const options = await element.$$('option');
+                for (const option of options) {
+                  const optionValue = await option.evaluate(el => (el as HTMLOptionElement).value);
+                  const optionText = await option.evaluate(el => (el as HTMLOptionElement).textContent);
+                  
+                  if (optionValue?.toLowerCase().includes('yes') || 
+                      optionText?.toLowerCase().includes('yes') ||
+                      optionValue?.toLowerCase().includes('true') ||
+                      optionText?.toLowerCase().includes('true')) {
+                    await option.click();
+                    logger.info(`Selected "Yes" option for authorization question`);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        logger.debug('Failed to handle authorization questions:', error);
+      }
+
+      logger.info('Completed handling remaining fields and yes/no selectors');
+    } catch (error) {
+      logger.error('Error handling remaining fields and yes/no selectors:', error);
+    }
+  }
+
+  /**
    * Improved submit logic: check for validation errors and log result
    */
   private async improvedSubmit(): Promise<boolean> {
