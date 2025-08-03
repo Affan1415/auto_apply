@@ -355,6 +355,70 @@ class PlaywrightJobApplicator {
   }
 
   /**
+   * Generate a random US phone number
+   */
+  private generateRandomUSPhoneNumber(): string {
+    const area = Math.floor(200 + Math.random() * 800);
+    const prefix = Math.floor(200 + Math.random() * 800);
+    const line = Math.floor(1000 + Math.random() * 9000);
+    return `${area}${prefix}${line}`;
+  }
+
+  /**
+   * Handle phone input - hardcoded to select United States (+1) and generate US number
+   */
+  private async handlePhoneInput(): Promise<void> {
+    if (!this.page) return;
+
+    try {
+      logger.info('Starting phone input handling - selecting United States (+1)...');
+      
+      // Click the country flag to open dropdown
+      await this.page.click('.iti__selected-flag');
+      logger.info('Clicked country flag to open dropdown');
+      
+      // Wait for dropdown to appear
+      await this.page.waitForTimeout(1000);
+      
+      // Select United States (+1) - using the exact selector from the HTML
+      await this.page.click('#iti-0__item-us-preferred');
+      logger.info('Selected United States (+1) from dropdown');
+      
+      // Wait for dropdown to close
+      await this.page.waitForTimeout(500);
+      
+      // Generate and fill random US phone number
+      const phone = '415-555-2671';
+
+      logger.info(`Generated random US phone number: ${phone}`);
+      
+      // Use the local robustFill function
+      const phoneInput = await this.page.$('input[type="tel"], input[name*="phone"], input[placeholder*="phone"], input[aria-label*="phone"]');
+      if (phoneInput) {
+        await phoneInput.fill(phone);
+        logger.info(`Filled phone input with: ${phone}`);
+      } else {
+        logger.warn('Could not find phone input field');
+      }
+      
+    } catch (error) {
+      logger.warn('Failed to handle phone input with country selector, falling back to basic phone fill');
+      // Fallback to basic phone fill
+      //const phone = this.generateRandomUSPhoneNumber();
+      const phone = '415-555-2671';
+      logger.info(`Using fallback phone number: ${phone}`);
+      
+      const phoneInput = await this.page.$('input[type="tel"], input[name*="phone"], input[placeholder*="phone"], input[aria-label*="phone"]');
+      if (phoneInput) {
+        await phoneInput.fill(phone);
+        logger.info(`Filled phone input with fallback: ${phone}`);
+      } else {
+        logger.warn('Could not find phone input field for fallback');
+      }
+    }
+  }
+
+  /**
    * Fill all fields using userConfig or OpenAI for missing values
    */
   private async fillAllFieldsWithAI(userConfig: any): Promise<void> {
@@ -460,14 +524,8 @@ class PlaywrightJobApplicator {
       'input[aria-label*="headline" i]'
     ], headline);
 
-    // Phone
-    const phone = userConfig.phone || await getValue('Phone');
-    await robustFill('Phone', [
-      'input[type="tel"]',
-      'input[name*="phone" i]',
-      'input[placeholder*="phone" i]',
-      'input[aria-label*="phone" i]'
-    ], phone);
+    // Phone - hardcoded to select United States (+1) and generate US number
+    await this.handlePhoneInput();
 
     // Address
     const address = userConfig.address || await getValue('Address');
