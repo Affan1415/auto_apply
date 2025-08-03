@@ -536,73 +536,73 @@ class PlaywrightJobApplicator {
     ], address);
 
     // --- Profile: Education ---
-    let educations = [];
-    if (userConfig.education && Array.isArray(userConfig.education)) {
-      educations = userConfig.education;
-    } else if (userConfig.education) {
-      try { educations = JSON.parse(userConfig.education); } catch {}
-    }
-    if (!educations.length) {
-      const eduAI = await getValue('Education');
-      educations = [{ degree: eduAI }];
-    }
-    for (const edu of educations) {
-      // Wait for '+ Add' button to be enabled
-      const addBtn = await this.page.waitForSelector('button[data-ui="add-section"][aria-label*="Education"]', { timeout: 5000 }).catch(() => null);
-      if (addBtn) {
-        const isDisabled = await addBtn.getAttribute('disabled');
-        if (isDisabled !== null) {
-          logger.warn('Education "+ Add" button is disabled. Required fields above may not be filled.');
-        } else {
-          await addBtn.click();
-          logger.info('Clicked "+ Add" button for Education');
-          // Wait for the new input to appear (try common selectors)
-          const eduInput = await this.page.waitForSelector('input[name*="education" i], input[placeholder*="education" i], input[aria-label*="education" i]', { timeout: 5000 }).catch(() => null);
-          if (eduInput) {
-            await eduInput.fill(edu.degree || edu.field || edu.school || '');
-            logger.info('Filled education input after clicking "+ Add"');
-          } else {
-            logger.warn('Could not find education input after clicking "+ Add"');
-          }
-        }
-      } else {
-        logger.warn('Could not find "+ Add" button for Education');
-      }
-    }
+    // let educations = [];
+    // if (userConfig.education && Array.isArray(userConfig.education)) {
+    //   educations = userConfig.education;
+    // } else if (userConfig.education) {
+    //   try { educations = JSON.parse(userConfig.education); } catch {}
+    // }
+    // if (!educations.length) {
+    //   const eduAI = await getValue('Education');
+    //   educations = [{ degree: eduAI }];
+    // }
+    // for (const edu of educations) {
+    //   // Wait for '+ Add' button to be enabled
+    //   const addBtn = await this.page.waitForSelector('button[data-ui="add-section"][aria-label*="Education"]', { timeout: 5000 }).catch(() => null);
+    //   if (addBtn) {
+    //     const isDisabled = await addBtn.getAttribute('disabled');
+    //     if (isDisabled !== null) {
+    //       logger.warn('Education "+ Add" button is disabled. Required fields above may not be filled.');
+    //     } else {
+    //       await addBtn.click();
+    //       logger.info('Clicked "+ Add" button for Education');
+    //       // Wait for the new input to appear (try common selectors)
+    //       const eduInput = await this.page.waitForSelector('input[name*="education" i], input[placeholder*="education" i], input[aria-label*="education" i]', { timeout: 5000 }).catch(() => null);
+    //       if (eduInput) {
+    //         await eduInput.fill(edu.degree || edu.field || edu.school || '');
+    //         logger.info('Filled education input after clicking "+ Add"');
+    //       } else {
+    //         logger.warn('Could not find education input after clicking "+ Add"');
+    //       }
+    //     }
+    //   } else {
+    //     logger.warn('Could not find "+ Add" button for Education');
+    //   }
+    // }
 
-    // --- Profile: Experience ---
-    let experiences = [];
-    if (userConfig.work_experience && Array.isArray(userConfig.work_experience)) {
-      experiences = userConfig.work_experience;
-    } else if (userConfig.work_experience) {
-      try { experiences = JSON.parse(userConfig.work_experience); } catch {}
-    }
-    if (!experiences.length) {
-      const expAI = await getValue('Experience');
-      experiences = [{ position: expAI }];
-    }
-    for (const exp of experiences) {
-      // Try to click '+ Add' for experience if present
-      const addBtn = await this.page.$('button[data-ui="add-section"][aria-label*="Experience"]');
-      if (addBtn) {
-        const isDisabled = await addBtn.getAttribute('disabled');
-        if (isDisabled !== null) {
-          logger.warn('Experience "+ Add" button is disabled. Required fields above may not be filled.');
-        } else {
-          await addBtn.click();
-          logger.info('Clicked "+ Add" button for Experience');
-          const expInput = await this.page.waitForSelector('input[name*="experience" i], input[placeholder*="experience" i], input[aria-label*="experience" i]', { timeout: 5000 }).catch(() => null);
-          if (expInput) {
-            await expInput.fill(exp.position || exp.company || '');
-            logger.info('Filled experience input after clicking "+ Add"');
-          } else {
-            logger.warn('Could not find experience input after clicking "+ Add"');
-          }
-        }
-      } else {
-        logger.warn('Could not find "+ Add" button for Experience');
-      }
-    }
+    // // --- Profile: Experience ---
+    // let experiences = [];
+    // if (userConfig.work_experience && Array.isArray(userConfig.work_experience)) {
+    //   experiences = userConfig.work_experience;
+    // } else if (userConfig.work_experience) {
+    //   try { experiences = JSON.parse(userConfig.work_experience); } catch {}
+    // }
+    // if (!experiences.length) {
+    //   const expAI = await getValue('Experience');
+    //   experiences = [{ position: expAI }];
+    // }
+    // for (const exp of experiences) {
+    //   // Try to click '+ Add' for experience if present
+    //   const addBtn = await this.page.$('button[data-ui="add-section"][aria-label*="Experience"]');
+    //   if (addBtn) {
+    //     const isDisabled = await addBtn.getAttribute('disabled');
+    //     if (isDisabled !== null) {
+    //       logger.warn('Experience "+ Add" button is disabled. Required fields above may not be filled.');
+    //     } else {
+    //       await addBtn.click();
+    //       logger.info('Clicked "+ Add" button for Experience');
+    //       const expInput = await this.page.waitForSelector('input[name*="experience" i], input[placeholder*="experience" i], input[aria-label*="experience" i]', { timeout: 5000 }).catch(() => null);
+    //       if (expInput) {
+    //         await expInput.fill(exp.position || exp.company || '');
+    //         logger.info('Filled experience input after clicking "+ Add"');
+    //       } else {
+    //         logger.warn('Could not find experience input after clicking "+ Add"');
+    //       }
+    //     }
+    //   } else {
+    //     logger.warn('Could not find "+ Add" button for Experience');
+    //   }
+    // }
 
     // --- Summary ---
     const summary = userConfig.key_skills || userConfig.interest_reason || await getValue('Summary');
@@ -649,6 +649,9 @@ class PlaywrightJobApplicator {
       'textarea[aria-label*="commute" i]',
       'textarea[aria-label*="relocate" i]'
     ], relocate);
+
+    // Handle remaining fields and yes/no selectors
+    await this.handleRemainingFieldsAndYesNoSelectors();
   }
 
   /**
@@ -690,11 +693,47 @@ class PlaywrightJobApplicator {
    * Handle file uploads (resume)
    */
   private async handleFileUploads(userConfig: any): Promise<void> {
-    if (!this.page || !userConfig.resume_path) return;
+    if (!this.page) return;
 
     try {
+      let resumePath = null;
+
+      // Check if user has selected_resume_id
+      if (userConfig.selected_resume_id) {
+        logger.info(`User has selected resume ID: ${userConfig.selected_resume_id}`);
+        
+        // Get resume data from database
+        const resumeData = await supabaseManager.getResumeById(userConfig.selected_resume_id);
+        if (resumeData) {
+          logger.info(`Found resume data for: ${resumeData.first_name} ${resumeData.last_name}`);
+          
+          // Generate PDF from resume data and upload to storage
+          resumePath = await supabaseManager.generateAndUploadResumePDF(resumeData);
+          logger.info(`Generated and uploaded resume PDF: ${resumePath}`);
+        } else {
+          logger.warn(`No resume data found for ID: ${userConfig.selected_resume_id}`);
+        }
+      } else if (userConfig.resume_path) {
+        // Fallback to existing resume_path
+        resumePath = userConfig.resume_path;
+        logger.info(`Using existing resume path: ${resumePath}`);
+      }
+
+      if (!resumePath) {
+        logger.warn('No resume available, creating empty PDF as fallback');
+        
+        // Create empty PDF as fallback
+        try {
+          resumePath = await supabaseManager.generateAndUploadEmptyPDF(userConfig.id);
+          logger.info(`Created and uploaded empty resume PDF: ${resumePath}`);
+        } catch (error) {
+          logger.error('Failed to create empty PDF:', error);
+          return;
+        }
+      }
+
       // Download resume from Supabase
-      const resumeBuffer = await supabaseManager.getResumeFile(userConfig.resume_path);
+      const resumeBuffer = await supabaseManager.getResumeFile(resumePath);
       if (!resumeBuffer) {
         logger.warn('No resume file found, skipping file upload');
         return;
@@ -709,15 +748,155 @@ class PlaywrightJobApplicator {
       const tempFilePath = path.join(tempDir, `resume_${userConfig.id}.pdf`);
       fs.writeFileSync(tempFilePath, Buffer.from(resumeBuffer));
 
-      // Find file input and upload
-      const fileInput = await this.page.$('input[type="file"]');
+      // Enhanced file input detection for Workable forms
+      const fileInputSelectors = [
+        'input[type="file"]',
+        'input[data-ui="resume"]',
+        'input[accept*="pdf"]',
+        'input[accept*="doc"]',
+        'input[accept*="docx"]',
+        'input[accept*=".pdf,.doc,.docx"]',
+        'input[aria-labelledby*="resume"]',
+        'input[id*="resume"]',
+        'input[name*="resume"]',
+        'input[class*="file"]',
+        'input[class*="upload"]',
+        // Workable specific selectors based on the HTML structure
+        'input[data-ui="resume"]',
+        'input[id*="input_files_input"]',
+        'input[class*="styles__hidden-file-input"]',
+        'input[accept*="application/pdf"]',
+        'input[accept*="application/msword"]',
+        'input[accept*="application/vnd.openxmlformats-officedocument.wordprocessingml.document"]'
+      ];
+
+      let fileInput = null;
+      for (const selector of fileInputSelectors) {
+        try {
+          fileInput = await this.page.$(selector);
+          if (fileInput) {
+            logger.info(`Found file input using selector: ${selector}`);
+            break;
+          }
+        } catch (error) {
+          logger.debug(`Selector ${selector} failed:`, error);
+        }
+      }
+
       if (fileInput) {
-        await fileInput.setInputFiles(tempFilePath);
-        logger.info('Resume uploaded successfully');
+        // Wait for file input to be ready
+        await this.page.waitForTimeout(1000);
+        
+        // Try to upload the file
+        try {
+          await fileInput.setInputFiles(tempFilePath);
+          logger.info('Resume uploaded successfully using setInputFiles');
+          
+          // Wait for upload to complete and check for success indicators
+          await this.page.waitForTimeout(2000);
+          
+          // Check if file was uploaded successfully by looking for success indicators
+          const successIndicators = await this.page.$$('.styles__preview--QXE0e, .file-upload-success, .upload-success, [data-role="preview"]');
+          if (successIndicators.length > 0) {
+            logger.info('File upload confirmed by success indicators');
+          } else {
+            logger.warn('No success indicators found after file upload');
+          }
+          
+        } catch (uploadError) {
+          logger.warn('setInputFiles failed, trying alternative upload method:', uploadError);
+          
+          // Try clicking the dropzone first (Workable specific)
+          try {
+            const dropzone = await this.page.$('[data-role="dropzone"], .styles__droparea--1L916, .styles__dropzone--ZvWLm');
+            if (dropzone) {
+              await dropzone.click();
+              logger.info('Clicked dropzone to activate file input');
+              await this.page.waitForTimeout(1000);
+              
+              // Try uploading again after clicking dropzone
+              await fileInput.setInputFiles(tempFilePath);
+              logger.info('Resume uploaded successfully after clicking dropzone');
+            }
+          } catch (dropzoneError) {
+            logger.warn('Dropzone click failed:', dropzoneError);
+          }
+          
+          // Alternative method: use evaluate to set files
+          try {
+            await this.page.evaluate((filePath) => {
+              const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+              if (input) {
+                // Create a FileList-like object
+                const dataTransfer = new DataTransfer();
+                // Note: This won't work with actual file path, but worth trying
+                const file = new File([''], 'resume.pdf', { type: 'application/pdf' });
+                dataTransfer.items.add(file);
+                input.files = dataTransfer.files;
+                
+                // Trigger change event
+                const event = new Event('change', { bubbles: true });
+                input.dispatchEvent(event);
+              }
+            }, tempFilePath);
+            logger.info('Tried alternative file upload method');
+          } catch (altError) {
+            logger.error('Alternative upload method also failed:', altError);
+          }
+        }
         
         // Clean up temp file
-        fs.unlinkSync(tempFilePath);
-      }
+        try {
+          fs.unlinkSync(tempFilePath);
+        } catch (cleanupError) {
+          logger.warn('Failed to clean up temp file:', cleanupError);
+        }
+              } else {
+          logger.warn('No file input found for resume upload. Trying to trigger upload button...');
+          
+          // Try clicking the upload button to trigger file input
+          try {
+            const uploadButton = await this.page.$('label[for*="input_files_input"], button:has-text("Upload"), label:has-text("Upload a file")');
+            if (uploadButton) {
+              await uploadButton.click();
+              logger.info('Clicked upload button to trigger file input');
+              await this.page.waitForTimeout(1000);
+              
+              // Try to find file input again after clicking button
+              const triggeredFileInput = await this.page.$('input[type="file"]');
+              if (triggeredFileInput) {
+                await triggeredFileInput.setInputFiles(tempFilePath);
+                logger.info('Resume uploaded successfully after triggering upload button');
+              } else {
+                logger.warn('File input still not found after clicking upload button');
+              }
+            } else {
+              logger.warn('No upload button found');
+            }
+          } catch (buttonError) {
+            logger.warn('Failed to click upload button:', buttonError);
+          }
+          
+          // Log all file inputs for debugging
+          const allFileInputs = await this.page.$$('input[type="file"]');
+          for (let i = 0; i < allFileInputs.length; i++) {
+            const input = allFileInputs[i];
+            if (input) {
+              const attributes = await input.evaluate((el) => {
+                const htmlEl = el as HTMLInputElement;
+                return {
+                  id: htmlEl.id,
+                  name: htmlEl.name,
+                  class: htmlEl.className,
+                  accept: htmlEl.accept,
+                  'data-ui': htmlEl.getAttribute('data-ui'),
+                  'aria-labelledby': htmlEl.getAttribute('aria-labelledby')
+                };
+              });
+              logger.info(`File input ${i + 1}:`, attributes);
+            }
+          }
+        }
 
     } catch (error) {
       logger.error('Error handling file upload:', error);
